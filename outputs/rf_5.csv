@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+hi_rsi2_short,-1,56,51.8,17.75,-4.81,22.56,1263,1
+hi_pdh_reject_short,-1,214,43.5,2.95,1.47,1.49,318,4
+hi_3bar_reversal_short,-1,472,39.8,-1.74,-0.85,-0.89,-421,6
+vol_lw_stretch_short,-1,225,51.6,19.59,-1.31,20.9,4703,0

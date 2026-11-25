@@ -1,0 +1,229 @@
+//@version=5
+// =============================================================
+//  NQ Opening-Range Breakout (ORB) — v2   (NY OPEN momentum + VWAP trend filter)
+//
+//  v1 BASELINE (NQ, 1 contract, Jan-Jun 2026): 55 trades, 41.8% win,
+//  PF 1.59, +$31,985 — BUT max drawdown $14,197 = ~7x the $2,000
+//  trailing bust line. The edge is real; the drawdown is the problem.
+//
+//  WHAT CHANGED IN v2 (goal = shrink the drawdown, keep the edge):
+//    1. SESSION-VWAP TREND FILTER (new): only take LONG breaks when the
+//       breakout closes ABOVE the opening VWAP, SHORT breaks only BELOW
+//       it. This kills counter-trend breakouts — the fakeouts that fail
+//       at the open — which is where most of v1's losing streak came
+//       from. Toggle: useTrendFilter (default ON).
+//    2. Everything else inherited from v1: 09:30-09:45 OR, NY-open-only
+//       window (09:45-10:30 ET), first break + ONE re-entry, opposite-
+//       side stop, 1.5R target, EOD flatten, daily-loss lockout.
+//
+//  >>> SIZING: run this on MNQ, not NQ. <<<
+//  NQ ($20/pt) drawdowns are ~7x the $2,000 wall. MNQ ($2/pt) is 1/10th
+//  the size -> the same trades give ~$1,420 DD (under $2,000) while still
+//  clearing the +$3,000 target. Backtest on the MNQ1! symbol for the
+//  numbers that actually matter to your TopStep account.
+//
+//  MUST run on a 1/3/5-min chart (the 09:30-09:45 OR can't form on
+//  higher timeframes). Validation = TradingView Strategy Tester.
+// =============================================================
+strategy("NQ Opening-Range Breakout - v2", overlay=true,
+     default_qty_type=strategy.fixed, default_qty_value=1,
+     initial_capital=50000,
+     commission_type=strategy.commission.cash_per_contract, commission_value=2.0,
+     calc_on_every_tick=false, max_labels_count=500, max_lines_count=500)
+
+// ===== Opening range =====
+orMinutes = input.int(15, "Opening-range length (min)", group="Opening Range", minval=1,
+     tooltip="15 = classic NQ default (9:30-9:45 ET). Try 5 (aggressive) or 30 (lets the open settle).")
+openHHMM  = input.int(930, "Session open (HHMM ET)", group="Opening Range")
+bufTicks  = input.int(2, "Breakout buffer (ticks past the range)", group="Opening Range", minval=0,
+     tooltip="Close must clear the OR by this many ticks to count as a real break. NQ tick = 0.25 pt.")
+
+// ===== Entry window =====
+// Trade the OPEN and only the open.
+entryEndHHMM = input.int(1030, "Stop taking new breaks after (HHMM ET)", group="Entry Window")
+
+// ===== Trend filter (NEW in v2) =====
+useTrendFilter = input.bool(true, "Only break WITH session VWAP", group="Trend Filter",
+     tooltip="ON = long only when price is above the opening VWAP, short only when below. Skips counter-trend fakeouts that fail at the open. This is the main drawdown fix vs v1.")
+
+// ===== Range quality filter =====
+useRangeFilter = input.bool(false, "Skip days with a junk-sized OR", group="Range Filter")
+minRangePts = input.float(8,  "Min OR width (pts)", group="Range Filter")
+maxRangePts = input.float(70, "Max OR width (pts)", group="Range Filter")
+
+// ===== Risk =====
+stopMode = input.string("Opposite side", "Stop placement", options=["Opposite side","Midpoint","ATR"], group="Risk",
+     tooltip="Opposite side = textbook ORB (widest). Midpoint = tighter (cuts loss size, more stop-outs). ATR = volatility-based.")
+atrLen   = input.int(14, "ATR Length (ATR stop mode)", group="Risk")
+atrMult  = input.float(1.5, "Stop = x ATR (ATR stop mode)", group="Risk")
+rMult    = input.float(1.5, "Target = R multiple of risk", group="Risk", minval=0.5)
+dayLoss  = input.float(1000, "Daily Loss Limit ($)", group="Risk",
+     tooltip="On MNQ this rarely triggers (moves are 1/10th); keep ~600-1000. On NQ it's a hard daily stop.")
+
+// ===== Circuit breakers =====
+maxTrades = input.int(2, "Max trades per day", group="Circuit breakers", minval=1,
+     tooltip="2 = first break + ONE re-entry. 1 = no re-entry, 3 = aggressive.")
+
+// ===== Direction / session =====
+useLong  = input.bool(true, "Allow long breakouts",  group="Direction")
+useShort = input.bool(true, "Allow short breakouts", group="Direction")
+sess     = input.session("0930-1600", "RTH session (ET)", group="Filters")
+flattenEOD = input.bool(true, "Flatten at session end", group="Filters")
+
+// Free-plan window backtester:
+useDateFilter = input.bool(false, "Limit to date window below", group="Backtest Window")
+startDate     = input.time(timestamp("2026-01-01T00:00"), "Window start", group="Backtest Window")
+endDate       = input.time(timestamp("2026-06-18T23:59"), "Window end",   group="Backtest Window")
+
+// ===== Time helpers (ET) =====
+etH    = hour(time, "America/New_York")
+etM    = minute(time, "America/New_York")
+etMins = etH * 60 + etM
+openMins  = (openHHMM / 100) * 60 + (openHHMM % 100)
+orEndMins = openMins + orMinutes
+entryEnd  = (entryEndHHMM / 100) * 60 + (entryEndHHMM % 100)
+
+inSession = not na(time(timeframe.period, sess, "America/New_York"))
+inWindow  = not useDateFilter or (time >= startDate and time <= endDate)
+tick      = syminfo.mintick
+buf       = bufTicks * tick
+
+// Session VWAP (resets each new session automatically)
+vwap = ta.vwap(hlc3)
+
+// ===== Per-day state =====
+newDay = ta.change(time("D")) != 0
+var float orHigh = na
+var float orLow  = na
+var bool  orDone = false
+var int   tradesToday = 0
+var float dayStartEq  = na
+var float eStop = na
+var float eTgt  = na
+
+if newDay
+    orHigh := na
+    orLow  := na
+    orDone := false
+    tradesToday := 0
+    dayStartEq  := strategy.equity
+
+inOR = etMins >= openMins and etMins < orEndMins
+if inOR
+    orHigh := na(orHigh) ? high : math.max(orHigh, high)
+    orLow  := na(orLow)  ? low  : math.min(orLow, low)
+if etMins >= orEndMins and not orDone and not na(orHigh)
+    orDone := true
+
+orRange = (na(orHigh) or na(orLow)) ? na : orHigh - orLow
+rangeOK = not useRangeFilter or (not na(orRange) and orRange >= minRangePts and orRange <= maxRangePts)
+
+dayPnL  = na(dayStartEq) ? 0.0 : strategy.equity - dayStartEq
+lockout = dayPnL <= -dayLoss
+
+atr = ta.atr(atrLen)
+
+// ===== Breakout signals (now gated by the VWAP trend filter) =====
+inEntryWindow = etMins >= orEndMins and etMins < entryEnd
+armed = orDone and rangeOK and inEntryWindow and tradesToday < maxTrades and strategy.position_size == 0 and not lockout and inWindow
+
+trendUpOK   = not useTrendFilter or close > vwap
+trendDownOK = not useTrendFilter or close < vwap
+
+longBreak  = armed and useLong  and not na(orHigh) and close > orHigh + buf and trendUpOK
+shortBreak = armed and useShort and not na(orLow)  and close < orLow  - buf and trendDownOK
+
+longStop  = stopMode == "Opposite side" ? orLow  : stopMode == "Midpoint" ? (orHigh + orLow) / 2 : close - atrMult * atr
+shortStop = stopMode == "Opposite side" ? orHigh : stopMode == "Midpoint" ? (orHigh + orLow) / 2 : close + atrMult * atr
+longRisk  = close - longStop
+shortRisk = shortStop - close
+
+// ===== Orders =====
+if longBreak and longRisk > 0
+    eStop := longStop
+    eTgt  := close + rMult * longRisk
+    strategy.entry("Long", strategy.long)
+    tradesToday += 1
+if shortBreak and shortRisk > 0
+    eStop := shortStop
+    eTgt  := close - rMult * shortRisk
+    strategy.entry("Short", strategy.short)
+    tradesToday += 1
+
+inLong  = strategy.position_size > 0
+inShort = strategy.position_size < 0
+if inLong
+    strategy.exit("Exit Long",  from_entry="Long",  stop=eStop, limit=eTgt)
+if inShort
+    strategy.exit("Exit Short", from_entry="Short", stop=eStop, limit=eTgt)
+
+sessionEnding = inSession[1] and not inSession
+if flattenEOD and sessionEnding and strategy.position_size != 0
+    strategy.close_all("EOD")
+if lockout and strategy.position_size != 0
+    strategy.close_all("Daily stop")
+
+// ===== Status string =====
+status = lockout ? "LOCKED" :
+     inLong ? "LONG (riding break)" :
+     inShort ? "SHORT (riding break)" :
+     inOR ? "OR building..." :
+     (orDone and not rangeOK) ? "skip - OR size out of bounds" :
+     armed ? "ARMED - waiting for break" :
+     (etMins >= entryEnd and tradesToday == 0) ? "no break (window done)" :
+     not inSession ? "closed" : "WAIT"
+
+// ===== Visuals =====
+showOR = (inOR or orDone) and inSession
+plot(showOR and not na(orHigh) ? orHigh : na, "OR High", color=color.new(color.teal, 0), style=plot.style_linebr, linewidth=2)
+plot(showOR and not na(orLow)  ? orLow  : na, "OR Low",  color=color.new(color.maroon, 0), style=plot.style_linebr, linewidth=2)
+plot(inSession ? vwap : na, "VWAP", color=color.new(color.orange, 0), style=plot.style_linebr, linewidth=1)
+
+longOpened  = strategy.position_size > 0 and strategy.position_size[1] <= 0
+shortOpened = strategy.position_size < 0 and strategy.position_size[1] >= 0
+justFlat    = strategy.position_size == 0 and strategy.position_size[1] != 0
+
+if longOpened
+    label.new(bar_index, low,  "BREAK+", style=label.style_label_up,   color=color.new(color.green,0), textcolor=color.white, size=size.small)
+if shortOpened
+    label.new(bar_index, high, "BREAK-", style=label.style_label_down, color=color.new(color.red,0),   textcolor=color.white, size=size.small)
+if justFlat and strategy.closedtrades > 0
+    i    = strategy.closedtrades - 1
+    ePx  = strategy.closedtrades.entry_price(i)
+    xPx  = strategy.closedtrades.exit_price(i)
+    eBar = strategy.closedtrades.entry_bar_index(i)
+    xBar = strategy.closedtrades.exit_bar_index(i)
+    won  = strategy.closedtrades.profit(i) > 0
+    col  = won ? color.new(color.green, 0) : color.new(color.red, 0)
+    line.new(eBar, ePx, xBar, xPx, color=col, width=2)
+    label.new(xBar, xPx, won ? "WIN" : "LOSS",
+         style = won ? label.style_label_down : label.style_label_up,
+         color=col, textcolor=color.white, size=size.tiny)
+
+// ===== UI panel =====
+var table t = table.new(position.top_right, 2, 9, border_width=1, frame_color=color.gray, frame_width=1)
+if barstate.islast
+    g = color.new(color.gray, 40)
+    statusColor = inLong ? color.green : inShort ? color.red : armed ? color.new(color.teal, 20) : color.new(color.gray, 30)
+    table.cell(t, 0, 0, "ORB", bgcolor=color.black, text_color=color.white)
+    table.cell(t, 1, 0, "v2",  bgcolor=color.black, text_color=color.white)
+    table.cell(t, 0, 1, "Status", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 1, status,   text_color=color.white, bgcolor=statusColor)
+    table.cell(t, 0, 2, "OR High", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 2, na(orHigh) ? "-" : str.tostring(orHigh, "#.00"), text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 3, "OR Low", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 3, na(orLow) ? "-" : str.tostring(orLow, "#.00"), text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 4, "OR width", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 4, na(orRange) ? "-" : str.tostring(orRange, "#.0") + " pt", text_color=color.white, bgcolor=rangeOK ? g : color.new(color.orange, 20))
+    table.cell(t, 0, 5, "VWAP", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 5, na(vwap) ? "-" : str.tostring(vwap, "#.00"), text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 6, "Session", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 6, inSession ? "OPEN" : "closed", text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 7, "Day P/L", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 7, "$" + str.tostring(dayPnL, "#"), text_color=color.white, bgcolor=lockout ? color.red : g)
+    table.cell(t, 0, 8, "Trades today", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 8, str.tostring(tradesToday) + " / " + str.tostring(maxTrades), text_color=color.white, bgcolor=g)
+
+// ===== Alerts =====
+alertcondition(longBreak,  "ORB LONG",  "ORB v2 BUY - broke ABOVE the opening range, with VWAP")
+alertcondition(shortBreak, "ORB SHORT", "ORB v2 SELL - broke BELOW the opening range, with VWAP")

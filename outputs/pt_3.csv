@@ -1,0 +1,17 @@
+long,short,sl,tp,cap,budget,hold_paid,hold_bust,hold_mean,hold_med,hold_days,recent_paid,recent_bust,recent_mean,recent_med,recent_days
+sr_round100_break,macd_x_short,2.0,3.0,440,300,44.3,7.9,1177,0,26,0.0,0.0,0,0,-1
+sr_round100_break,macd_x_short,2.0,3.0,440,400,46.7,2.4,1122,0,25,0.0,0.0,0,0,-1
+ic_fvg_long,macd_x_short,2.0,3.0,440,300,36.4,4.1,450,0,29,4.3,0.0,12,0,33
+ic_fvg_long,macd_x_short,2.0,3.0,440,400,36.1,3.4,469,0,31,4.3,0.0,12,0,33
+vwap_reclaim_long,macd_x_short,2.0,3.0,440,300,31.6,8.2,619,0,25,13.0,0.0,47,0,15
+vwap_reclaim_long,macd_x_short,2.0,3.0,440,400,31.3,12.4,672,0,24,13.0,0.0,47,0,15
+lw_gsv_long,macd_x_short,2.0,3.0,440,300,30.2,3.1,292,0,39,0.0,0.0,0,0,-1
+lw_gsv_long,macd_x_short,2.0,3.0,440,400,29.9,4.5,291,0,40,0.0,0.0,0,0,-1
+qm_ep_long,macd_x_short,2.0,3.0,440,300,38.5,1.7,690,0,37,0.0,0.0,0,0,-1
+qm_ep_long,macd_x_short,2.0,3.0,440,400,39.5,4.1,720,0,40,0.0,4.3,0,0,-1
+wy_lps_long,macd_x_short,2.0,3.0,440,300,45.0,5.5,1039,0,36,4.3,0.0,13,0,26
+wy_lps_long,macd_x_short,2.0,3.0,440,400,43.6,2.4,906,0,35,4.3,0.0,13,0,26
+bs_avwap_2day_long,macd_x_short,2.0,3.0,440,300,26.8,12.0,255,0,31,0.0,4.3,0,0,-1
+bs_avwap_2day_long,macd_x_short,2.0,3.0,440,400,24.7,12.7,335,0,29,0.0,4.3,0,0,-1
+ww_psar_dmi_long,macd_x_short,2.0,3.0,440,300,39.5,1.4,776,0,35,0.0,0.0,0,0,-1
+ww_psar_dmi_long,macd_x_short,2.0,3.0,440,400,40.2,2.1,796,0,35,0.0,0.0,0,0,-1

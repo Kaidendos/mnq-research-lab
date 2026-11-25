@@ -1,0 +1,17 @@
+long,short,sl,tp,cap,budget,hold_paid,hold_bust,hold_mean,hold_med,hold_days,recent_paid,recent_bust,recent_mean,recent_med,recent_days
+sr_round100_break,donch20_short,2.0,3.0,440,300,39.2,7.9,1272,0,27,47.8,4.3,367,0,22
+sr_round100_break,donch20_short,2.0,3.0,440,400,36.4,9.3,1242,0,25,52.2,0.0,394,316,23
+ic_fvg_long,donch20_short,2.0,3.0,440,300,28.2,11.7,404,0,26,52.2,0.0,179,258,34
+ic_fvg_long,donch20_short,2.0,3.0,440,400,30.2,6.2,421,0,27,34.8,8.7,155,0,34
+vwap_reclaim_long,donch20_short,2.0,3.0,440,300,22.7,8.6,377,0,16,39.1,0.0,410,0,16
+vwap_reclaim_long,donch20_short,2.0,3.0,440,400,24.1,8.9,384,0,17,39.1,0.0,403,0,15
+lw_gsv_long,donch20_short,2.0,3.0,440,300,22.7,6.5,216,0,44,0.0,0.0,0,0,-1
+lw_gsv_long,donch20_short,2.0,3.0,440,400,23.0,11.0,208,0,42,0.0,0.0,0,0,-1
+qm_ep_long,donch20_short,2.0,3.0,440,300,39.9,4.1,461,0,38,4.3,0.0,15,0,32
+qm_ep_long,donch20_short,2.0,3.0,440,400,40.2,4.5,535,0,37,4.3,0.0,15,0,32
+wy_lps_long,donch20_short,2.0,3.0,440,300,39.2,0.3,620,0,38,47.8,0.0,174,0,37
+wy_lps_long,donch20_short,2.0,3.0,440,400,40.2,0.0,800,0,40,47.8,0.0,174,0,37
+bs_avwap_2day_long,donch20_short,2.0,3.0,440,300,38.1,2.7,888,0,36,52.2,0.0,217,275,46
+bs_avwap_2day_long,donch20_short,2.0,3.0,440,400,37.8,2.4,737,0,35,52.2,0.0,230,356,43
+ww_psar_dmi_long,donch20_short,2.0,3.0,440,300,46.0,7.9,974,270,39,17.4,0.0,86,0,27
+ww_psar_dmi_long,donch20_short,2.0,3.0,440,400,45.0,6.2,973,0,37,17.4,0.0,74,0,27

@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+lo_sesslow_reject_long,1,555,41.8,-0.13,-1.07,0.94,522,4
+lo_bb_reclaim_long,1,502,43.0,3.25,-0.46,3.71,1864,1
+lo_orlow_reclaim_long,1,293,41.0,0.03,0.22,-0.19,-56,6
+lo_extension_long,1,579,38.7,-7.29,0.97,-8.26,-4783,10

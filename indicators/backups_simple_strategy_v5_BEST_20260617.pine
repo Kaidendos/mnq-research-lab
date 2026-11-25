@@ -1,0 +1,218 @@
+//@version=5
+// =============================================================
+//  NQ Simple Strategy — Signal Tool v5  (ACTIVE variant)
+//  Goal: lift v3's ~1 trade/week toward ~5 good trades/week for
+//  a TopStep month, WITHOUT the edge-killing over-loosening that
+//  sank v4. Two independent, tunable frequency knobs:
+//    (1) MACD-cross lookback (default 2; v3=1, v4's failed value=3)
+//    (2) OPTIONAL setup #2 — Bollinger-midline reclaim WITH trend
+//        (default OFF; adds trades orthogonally, not by loosening
+//         the primary setup).
+//  v3 core kept intact: 200-EMA trend filter, breakeven stop,
+//  ADX regime filter, RTH session, daily-loss lockout, visuals.
+//  v3 stays the safe baseline — this is the experiment.
+//  NQ ($20/pt) or MNQ ($2/pt) — switch the symbol.
+// =============================================================
+strategy("NQ Simple Strategy - Signal Tool v5", overlay=true,
+     default_qty_type=strategy.fixed, default_qty_value=1,
+     initial_capital=50000,
+     commission_type=strategy.commission.cash_per_contract, commission_value=2.0,
+     calc_on_every_tick=false, max_labels_count=500, max_lines_count=500)
+
+// ===== Inputs =====
+bbLen    = input.int(12,  "Bollinger Length",  group="Indicators")
+bbMult   = input.float(2.0,"Bollinger StdDev", group="Indicators")
+macdFast = input.int(12,  "MACD Fast",         group="Indicators")
+macdSlow = input.int(26,  "MACD Slow",         group="Indicators")
+macdSig  = input.int(9,   "MACD Signal",       group="Indicators")
+rsiLen   = input.int(7,   "RSI Length",        group="Indicators")
+rsiMid   = input.int(50,  "RSI Midline",       group="Indicators")
+
+// FREQUENCY knobs (the v5 experiment) -------------------------------
+// (1) How many bars after a MACD cross an entry can still fire if the
+//     other conditions align. 1 = v3 (cross bar only). Keep LOW (2-3);
+//     v4 proved 3 over-loosens and collapses PF. Start at 2.
+macdLookback = input.int(2, "MACD cross lookback (bars)", group="Frequency", minval=1, maxval=5)
+// (2) Optional second setup: price reclaims the BB midline (basis) in
+//     the trend direction with MACD already onside. Adds trades without
+//     touching the primary setup. Default OFF — turn on to A/B test.
+useSetup2 = input.bool(false, "Enable setup #2: BB-midline reclaim", group="Frequency")
+// -------------------------------------------------------------------
+
+// QUALITY knobs — we have frequency headroom (~7/wk vs ~5 needed), so
+// tighten these to trim the worst trades and lift PF. Defaults = neutral
+// (50/50) so out-of-box behavior is unchanged. Try 55 / 45 for conviction.
+rsiLongMin  = input.int(50, "RSI long floor (>= to go long)",   group="Quality", minval=50, maxval=70)
+rsiShortMax = input.int(50, "RSI short ceiling (<= to go short)", group="Quality", minval=30, maxval=50)
+
+adrLen   = input.int(20,  "ADR Lookback (days)", group="Risk")
+stopPct  = input.float(10,"Stop = % of ADR",   group="Risk") / 100
+tgtPct   = input.float(15,"Target = % of ADR", group="Risk") / 100
+dayLoss  = input.float(1000, "Daily Loss Limit ($)", group="Risk")
+useBE    = input.bool(true, "Move stop to breakeven at +1R", group="Risk")
+beTrigR  = input.float(1.0, "Breakeven trigger (xRisk)", group="Risk")
+
+useSession = input.bool(true, "RTH session filter",      group="Filters")
+sess       = input.session("0930-1600", "Session (ET)",  group="Filters")
+flattenEOD = input.bool(true, "Flatten at session end",  group="Filters")
+adxLen     = input.int(14, "ADX Length",                 group="Filters")
+adxMin     = input.float(20, "Min ADX (regime filter)",  group="Filters")
+useTrend   = input.bool(true, "HTF trend filter (EMA)",  group="Filters")
+trendLen   = input.int(200, "Trend EMA length",          group="Filters")
+
+useLong  = input.bool(true, "Allow Longs",  group="Direction")
+useShort = input.bool(true, "Allow Shorts", group="Direction")
+
+// Free-plan way to backtest a specific window (no Premium date picker needed):
+useDateFilter = input.bool(false, "Limit to date window below", group="Backtest Window")
+startDate     = input.time(timestamp("2026-01-01T00:00"), "Window start", group="Backtest Window")
+endDate       = input.time(timestamp("2026-01-31T23:59"), "Window end",   group="Backtest Window")
+
+// ===== Indicators =====
+basis   = ta.sma(close, bbLen)
+dev     = bbMult * ta.stdev(close, bbLen)
+upperBB = basis + dev
+lowerBB = basis - dev
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSig)
+rsi = ta.rsi(close, rsiLen)
+[diPlus, diMinus, adx] = ta.dmi(adxLen, adxLen)
+trendEMA = ta.ema(close, trendLen)
+
+adr = request.security(syminfo.tickerid, "D", ta.sma(high - low, adrLen), lookahead=barmerge.lookahead_off)
+stopPts = adr * stopPct
+tgtPts  = adr * tgtPct
+
+// ===== Filters =====
+inSession = useSession ? not na(time(timeframe.period, sess, "America/New_York")) : true
+regimeOK  = adx > adxMin
+upTrend   = not useTrend or close > trendEMA
+dnTrend   = not useTrend or close < trendEMA
+inWindow  = not useDateFilter or (time >= startDate and time <= endDate)
+
+// Daily-loss lockout
+newDay = ta.change(time("D")) != 0
+var float dayStartEq = na
+if newDay
+    dayStartEq := strategy.equity
+dayPnL  = na(dayStartEq) ? 0.0 : strategy.equity - dayStartEq
+lockout = dayPnL <= -dayLoss
+
+// ===== Signal logic =====
+// Primary setup (v3, with the lookback knob): a MACD cross within the
+// last `macdLookback` bars, MACD still onside, RSI onside, price inside band.
+crossUp = ta.crossover(macdLine, signalLine)
+crossDn = ta.crossunder(macdLine, signalLine)
+macdUpOK = ta.barssince(crossUp) <= macdLookback - 1 and macdLine > signalLine
+macdDnOK = ta.barssince(crossDn) <= macdLookback - 1 and macdLine < signalLine
+primaryLong  = macdUpOK and rsi > rsiLongMin and close < upperBB
+primaryShort = macdDnOK and rsi < rsiShortMax and close > lowerBB
+
+// Setup #2 (optional): price reclaims the BB midline in the trend
+// direction with MACD already onside. Orthogonal to the primary.
+setup2Long  = useSetup2 and ta.crossover(close, basis)  and macdLine > signalLine and rsi > rsiLongMin
+setup2Short = useSetup2 and ta.crossunder(close, basis) and macdLine < signalLine and rsi < rsiShortMax
+
+longCond  = useLong  and (primaryLong  or setup2Long)  and regimeOK and inSession and not lockout and upTrend  and inWindow
+shortCond = useShort and (primaryShort or setup2Short) and regimeOK and inSession and not lockout and dnTrend and inWindow
+
+sig  = longCond ? "BUY" : shortCond ? "SELL" : lockout ? "LOCKED" : not inSession ? "CLOSED" : "WAIT"
+bias = (close > basis and macdLine > signalLine) ? "BULLISH" :
+       (close < basis and macdLine < signalLine) ? "BEARISH" : "NEUTRAL"
+
+// ===== Orders =====
+if longCond
+    strategy.entry("Long", strategy.long)
+if shortCond
+    strategy.entry("Short", strategy.short)
+
+// Breakeven logic: once price reaches +beTrigR risk in favor, latch stop to entry
+inLong  = strategy.position_size > 0
+inShort = strategy.position_size < 0
+var bool beLong  = false
+var bool beShort = false
+if not inLong
+    beLong := false
+if not inShort
+    beShort := false
+beTrigPts = stopPts * beTrigR
+if inLong and high >= strategy.position_avg_price + beTrigPts
+    beLong := true
+if inShort and low <= strategy.position_avg_price - beTrigPts
+    beShort := true
+
+longStopLvl  = (useBE and beLong)  ? strategy.position_avg_price : strategy.position_avg_price - stopPts
+shortStopLvl = (useBE and beShort) ? strategy.position_avg_price : strategy.position_avg_price + stopPts
+
+if inLong
+    strategy.exit("Exit Long", from_entry="Long",
+         stop = longStopLvl, limit = strategy.position_avg_price + tgtPts)
+if inShort
+    strategy.exit("Exit Short", from_entry="Short",
+         stop = shortStopLvl, limit = strategy.position_avg_price - tgtPts)
+
+// Flatten at end of RTH session
+sessionEnding = inSession[1] and not inSession
+if flattenEOD and sessionEnding and strategy.position_size != 0
+    strategy.close_all("EOD")
+if lockout and strategy.position_size != 0
+    strategy.close_all("Daily stop")
+
+// ===== CLEAR entry -> exit visuals =====
+longOpened  = strategy.position_size > 0 and strategy.position_size[1] <= 0
+shortOpened = strategy.position_size < 0 and strategy.position_size[1] >= 0
+justFlat    = strategy.position_size == 0 and strategy.position_size[1] != 0
+
+if longOpened
+    label.new(bar_index, low,  "BUY",  style=label.style_label_up,   color=color.new(color.green,0), textcolor=color.white, size=size.small)
+if shortOpened
+    label.new(bar_index, high, "SELL", style=label.style_label_down, color=color.new(color.red,0),   textcolor=color.white, size=size.small)
+
+if justFlat and strategy.closedtrades > 0
+    i     = strategy.closedtrades - 1
+    ePx   = strategy.closedtrades.entry_price(i)
+    xPx   = strategy.closedtrades.exit_price(i)
+    eBar  = strategy.closedtrades.entry_bar_index(i)
+    xBar  = strategy.closedtrades.exit_bar_index(i)
+    won   = strategy.closedtrades.profit(i) > 0
+    col   = won ? color.new(color.green, 0) : color.new(color.red, 0)
+    line.new(eBar, ePx, xBar, xPx, color=col, width=2)
+    label.new(xBar, xPx, won ? "WIN" : "LOSS",
+         style = won ? label.style_label_down : label.style_label_up,
+         color=col, textcolor=color.white, size=size.tiny)
+
+// ===== Bands + trend =====
+plot(basis, "BB Basis", color=color.new(color.gray, 0))
+pu = plot(upperBB, "BB Upper", color=color.new(color.blue, 50))
+pl = plot(lowerBB, "BB Lower", color=color.new(color.blue, 50))
+fill(pu, pl, color=color.new(color.blue, 95))
+plot(useTrend ? trendEMA : na, "Trend EMA", color=color.new(color.orange, 0), linewidth=2)
+
+// ===== UI panel =====
+var table t = table.new(position.top_right, 2, 10, border_width=1, frame_color=color.gray, frame_width=1)
+if barstate.islast
+    sigColor = sig == "BUY" ? color.green : sig == "SELL" ? color.red : color.new(color.gray, 30)
+    g = color.new(color.gray, 40)
+    table.cell(t, 0, 0, "Signal Tool", bgcolor=color.black, text_color=color.white)
+    table.cell(t, 1, 0, "v5",          bgcolor=color.black, text_color=color.white)
+    table.cell(t, 0, 1, "Signal", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 1, sig,      text_color=color.white, bgcolor=sigColor)
+    table.cell(t, 0, 2, "Bias",   text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 2, bias,     text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 3, "Trend",  text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 3, close > trendEMA ? "UP" : "DOWN", text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 4, "RSI(7)", text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 4, str.tostring(rsi, "#.0"), text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 5, "MACD",   text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 5, macdLine > signalLine ? "Up" : "Down", text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 6, "ADX",    text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 6, str.tostring(adx, "#.0") + (regimeOK ? " ok" : " low"), text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 7, "Session",text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 7, inSession ? "OPEN" : "closed", text_color=color.white, bgcolor=g)
+    table.cell(t, 0, 8, "Day P/L",text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 8, "$" + str.tostring(dayPnL, "#"), text_color=color.white, bgcolor=lockout ? color.red : g)
+    table.cell(t, 0, 9, "Lookbk/S2",text_color=color.white, bgcolor=g)
+    table.cell(t, 1, 9, str.tostring(macdLookback) + (useSetup2 ? " / S2on" : " / S2off"), text_color=color.white, bgcolor=g)
+
+// ===== Alerts =====
+alertcondition(longCond,  "BUY signal",  "Simple Strategy v5 BUY")
+alertcondition(shortCond, "SELL signal", "Simple Strategy v5 SELL")

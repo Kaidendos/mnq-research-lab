@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+ex_blowoff_novol_short,-1,534,40.3,-0.79,1.2,-1.99,-1063,8
+ex_streak3_short,-1,929,40.6,-0.91,-1.02,0.11,103,4
+ex_washout3d_long,1,311,40.2,-2.67,1.16,-3.83,-1191,6
+ex_washout10d_long,1,164,37.2,-6.35,-0.87,-5.48,-899,8

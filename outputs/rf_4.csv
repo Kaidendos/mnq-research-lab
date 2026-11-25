@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+lo_rsi2_long,1,52,34.6,-12.51,0.68,-13.19,-686,9
+lo_pdl_reclaim_long,1,188,39.9,-10.47,0.2,-10.67,-2005,10
+lo_3bar_reversal_long,1,442,45.2,3.0,1.65,1.35,598,2
+sr_round100_break,1,624,47.9,6.77,2.03,4.74,2958,0

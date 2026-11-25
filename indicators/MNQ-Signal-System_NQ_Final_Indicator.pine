@@ -1,0 +1,184 @@
+//@version=5
+// =============================================================================
+// MNQ Final v2 — INDICATOR   (run on QQQ 5-min)
+// =============================================================================
+// Mirrors the Python bot: VWAP-gated direction, 4 setups, ATR risk shown in
+// MNQ-equivalent points/$ via the QQQ->NQ ratio (43 for QQQ, 1 for MNQ).
+// Draws entry arrows, SL/TP lines with $ labels, a WIN/LOSS tracker, and an
+// info table. Live-matches the bot because both read QQQ.
+// =============================================================================
+
+indicator("MNQ Final v2 — Indicator", shorttitle="MNQ Ind", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=100)
+
+// ── Inputs ───────────────────────────────────────────────────────────────────
+gConv  = "MNQ Conversion"
+gRisk  = "Risk"
+gShow  = "Display"
+nqRatio    = input.float(43.0, "QQQ -> NQ ratio (1 on MNQ)", group=gConv, step=1)
+pointValue = input.float(2.0,  "MNQ $ per point",           group=gConv, step=0.5)
+contracts  = input.int(3,      "Contracts",                 group=gConv, minval=1)
+
+atrLen   = input.int(14,  "ATR Length",  group=gRisk)
+slMult   = input.float(1.0, "SL x ATR",  group=gRisk, step=0.1)
+tpMult   = input.float(2.0, "TP x ATR",  group=gRisk, step=0.1)
+slMultQ  = input.float(0.75,"Quick SL x ATR", group=gRisk, step=0.05)
+tpMultQ  = input.float(1.5, "Quick TP x ATR", group=gRisk, step=0.1)
+adxMin   = input.int(20, "ADX min (trend)", group=gRisk)
+
+extBars   = input.int(12, "Level extend (bars)", group=gShow, minval=4)
+showQuick = input.bool(true, "Show Quick Scalps", group=gShow)
+showTable = input.bool(true, "Show Info Table",  group=gShow)
+
+// ── Core indicators ──────────────────────────────────────────────────────────
+tz = "America/New_York"
+ema9  = ta.ema(close, 9)
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+vwapVal = ta.vwap(hlc3)
+atr = ta.atr(atrLen)
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+plot(ema9,  "EMA 9",  color=color.new(color.white, 0),  linewidth=1)
+plot(ema21, "EMA 21", color=color.new(#FF9800, 0),      linewidth=2)
+plot(ema50, "EMA 50", color=color.new(#AB47BC, 0),      linewidth=1)
+plot(vwapVal, "VWAP", color=color.new(#29B6F6, 0),      linewidth=2)
+
+// ── Time / session ───────────────────────────────────────────────────────────
+etH = hour(time, tz)
+etM = minute(time, tz)
+isNewDay = na(time("D")[1]) or time("D") != time("D")[1]
+
+var float orH = na
+var float orL = na
+if isNewDay
+    orH := na
+    orL := na
+inOR = etH == 9 and etM >= 30
+if inOR
+    orH := na(orH) ? high : math.max(orH, high)
+    orL := na(orL) ? low  : math.min(orL, low)
+orReady = etH >= 10 and not na(orH) and not na(orL)
+
+inMorning   = (etH == 9 and etM >= 45) or (etH == 10) or (etH == 11 and etM < 30)
+inAfternoon = etH >= 13 and etH < 16
+inSession   = inMorning or inAfternoon
+
+// Prior-day high / low
+pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_off)
+pdl = request.security(syminfo.tickerid, "D", low[1],  lookahead=barmerge.lookahead_off)
+
+// OR / PDH-PDL reference lines
+plot(orReady ? orH : na, "OR High", color=color.new(#26A69A, 30), style=plot.style_linebr)
+plot(orReady ? orL : na, "OR Low",  color=color.new(#EF5350, 30), style=plot.style_linebr)
+
+// ── Direction (VWAP) ─────────────────────────────────────────────────────────
+bull = close > vwapVal
+bear = close < vwapVal
+
+// ── Setups ───────────────────────────────────────────────────────────────────
+orbRetestLong  = bull and not na(orH) and low  <= orH and close > orH and close[1] > orH
+orbRetestShort = bear and not na(orL) and high >= orL and close < orL and close[1] < orL
+ema21Long      = bull and ema21 >= ema21[1] and low  <= ema21 and close > ema21
+ema21Short     = bear and ema21 <= ema21[1] and high >= ema21 and close < ema21
+orbBreakLong   = bull and not na(orH) and close > orH and close[1] <= orH
+orbBreakShort  = bear and not na(orL) and close < orL and close[1] >= orL
+quickLong      = showQuick and bull and ta.crossover(ema9, ema21)
+quickShort     = showQuick and bear and ta.crossunder(ema9, ema21)
+
+gate = inSession and orReady and barstate.isconfirmed
+
+// Priority: Retest > EMA21 > Break > Quick
+longFire  = gate and (orbRetestLong or ema21Long or orbBreakLong or quickLong)
+shortFire = gate and (orbRetestShort or ema21Short or orbBreakShort or quickShort)
+
+longName  = orbRetestLong ? "ORB Retest" : ema21Long ? "EMA21 Pullback" : orbBreakLong ? "ORB Break" : "Quick Scalp"
+shortName = orbRetestShort ? "ORB Retest" : ema21Short ? "EMA21 Pullback" : orbBreakShort ? "ORB Break" : "Quick Scalp"
+longQuick  = not (orbRetestLong or ema21Long or orbBreakLong) and quickLong
+shortQuick = not (orbRetestShort or ema21Short or orbBreakShort) and quickShort
+
+// ── Risk levels ──────────────────────────────────────────────────────────────
+longSL  = close - atr * (longQuick  ? slMultQ : slMult)
+longTP  = close + atr * (longQuick  ? tpMultQ : tpMult)
+shortSL = close + atr * (shortQuick ? slMultQ : slMult)
+shortTP = close - atr * (shortQuick ? tpMultQ : tpMult)
+
+usd(qqqPts) => qqqPts * nqRatio * pointValue * contracts
+
+// ── Arrows ───────────────────────────────────────────────────────────────────
+plotshape(longFire,  "Long",  shape.triangleup,   location.belowbar, color.new(#26A69A, 0), size=size.small)
+plotshape(shortFire, "Short", shape.triangledown, location.abovebar, color.new(#EF5350, 0), size=size.small)
+
+// ── Entry labels + SL/TP lines ───────────────────────────────────────────────
+if longFire
+    slUsd = usd(close - longSL)
+    tpUsd = usd(longTP - close)
+    txt = "LONG (" + longName + ")\nADX " + str.tostring(math.round(adx)) + "  |  SL -$" + str.tostring(math.round(slUsd)) + "  TP +$" + str.tostring(math.round(tpUsd))
+    label.new(bar_index, low, txt, yloc=yloc.price, style=label.style_label_up, color=color.new(#1B5E20, 10), textcolor=color.white, size=size.small)
+    line.new(bar_index, longTP, bar_index + extBars, longTP, color=color.new(#26A69A, 0), style=line.style_dashed)
+    line.new(bar_index, longSL, bar_index + extBars, longSL, color=color.new(#EF5350, 0), style=line.style_dashed)
+    label.new(bar_index + extBars, longTP, "TP +$" + str.tostring(math.round(usd(longTP - close))), style=label.style_label_left, color=color.new(#26A69A, 0), textcolor=color.white, size=size.tiny)
+    label.new(bar_index + extBars, longSL, "SL -$" + str.tostring(math.round(usd(close - longSL))), style=label.style_label_left, color=color.new(#EF5350, 0), textcolor=color.white, size=size.tiny)
+
+if shortFire
+    slUsd = usd(shortSL - close)
+    tpUsd = usd(close - shortTP)
+    txt = "SHORT (" + shortName + ")\nADX " + str.tostring(math.round(adx)) + "  |  SL -$" + str.tostring(math.round(slUsd)) + "  TP +$" + str.tostring(math.round(tpUsd))
+    label.new(bar_index, high, txt, yloc=yloc.price, style=label.style_label_down, color=color.new(#B71C1C, 10), textcolor=color.white, size=size.small)
+    line.new(bar_index, shortTP, bar_index + extBars, shortTP, color=color.new(#26A69A, 0), style=line.style_dashed)
+    line.new(bar_index, shortSL, bar_index + extBars, shortSL, color=color.new(#EF5350, 0), style=line.style_dashed)
+    label.new(bar_index + extBars, shortTP, "TP +$" + str.tostring(math.round(usd(close - shortTP))), style=label.style_label_left, color=color.new(#26A69A, 0), textcolor=color.white, size=size.tiny)
+    label.new(bar_index + extBars, shortSL, "SL -$" + str.tostring(math.round(usd(shortSL - close))), style=label.style_label_left, color=color.new(#EF5350, 0), textcolor=color.white, size=size.tiny)
+
+// ── WIN / LOSS tracker (which of TP/SL is hit first) ─────────────────────────
+var int wins = 0
+var int losses = 0
+var bool active = false
+var bool aLong = false
+var float aSL = na
+var float aTP = na
+var int aBar = na
+
+if not active and (longFire or shortFire)
+    active := true
+    aLong := longFire
+    aSL := longFire ? longSL : shortSL
+    aTP := longFire ? longTP : shortTP
+    aBar := bar_index
+
+if active and bar_index > aBar
+    if aLong
+        if high >= aTP
+            wins += 1
+            active := false
+        else if low <= aSL
+            losses += 1
+            active := false
+    else
+        if low <= aTP
+            wins += 1
+            active := false
+        else if high >= aSL
+            losses += 1
+            active := false
+
+// ── Info table ───────────────────────────────────────────────────────────────
+var table tb = table.new(position.top_right, 2, 6, bgcolor=color.new(#0D0D0D, 15), border_color=color.new(#333333, 0), border_width=1, frame_color=color.new(#333333, 0), frame_width=1)
+
+if showTable and barstate.islast
+    total = wins + losses
+    wr = total > 0 ? 100.0 * wins / total : 0.0
+    dirTxt = bull ? "BULL (longs)" : bear ? "BEAR (shorts)" : "FLAT"
+    dirCol = bull ? #26A69A : bear ? #EF5350 : color.new(#9E9E9E, 0)
+    chop = adx < adxMin
+    table.cell(tb, 0, 0, "MNQ Final v2", text_color=color.white, bgcolor=color.new(#1565C0, 15), text_size=size.small)
+    table.cell(tb, 1, 0, nqRatio == 1 ? "MNQ" : "QQQ x" + str.tostring(nqRatio, "#"), text_color=#FFC107, bgcolor=color.new(#1565C0, 15), text_size=size.small)
+    table.cell(tb, 0, 1, "Direction", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 1, dirTxt, text_color=dirCol, text_size=size.small)
+    table.cell(tb, 0, 2, "ADX", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 2, str.tostring(math.round(adx)) + (chop ? " chop" : ""), text_color=chop ? #FF9800 : color.white, text_size=size.small)
+    table.cell(tb, 0, 3, "Session", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 3, inSession ? (inMorning ? "Morning" : "Afternoon") : "closed", text_color=inSession ? #26A69A : #9E9E9E, text_size=size.small)
+    table.cell(tb, 0, 4, "OR H/L", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 4, orReady ? str.tostring(orH, "#.##") + " / " + str.tostring(orL, "#.##") : "building", text_color=color.white, text_size=size.small)
+    table.cell(tb, 0, 5, "W/L (rate)", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 5, str.tostring(wins) + "/" + str.tostring(losses) + "  (" + str.tostring(wr, "#") + "%)", text_color=wr >= 50 ? #26A69A : #EF5350, text_size=size.small)

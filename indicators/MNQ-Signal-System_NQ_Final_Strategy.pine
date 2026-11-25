@@ -1,0 +1,132 @@
+//@version=5
+// =============================================================================
+// MNQ Final v2 — STRATEGY   (run on MNQ ONLY — P&L math is MNQ-specific)
+// =============================================================================
+// Backtests the same 4 setups the bot fires (VWAP-gated direction, ATR risk).
+// Adds a daily loss limit and a re-entry cooldown. Quick Scalps drag the PF
+// (core ~1.32 -> ~0.70 with quicks) so they're toggleable.
+//
+// Run on an MNQ contract chart, 5-min. Keep ratio = 1 (already MNQ).
+// =============================================================================
+
+strategy("MNQ Final v2 — Strategy", shorttitle="MNQ Strat", overlay=true, initial_capital=50000, pyramiding=0, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=1.0, calc_on_every_tick=false, max_lines_count=500, max_labels_count=500)
+
+// ── Inputs ───────────────────────────────────────────────────────────────────
+gRisk = "Risk"
+gGuard= "Guards"
+gSet  = "Setups"
+contracts = input.int(3, "Contracts", group=gRisk, minval=1)
+atrLen  = input.int(14,  "ATR Length", group=gRisk)
+slMult  = input.float(1.0, "SL x ATR", group=gRisk, step=0.1)
+tpMult  = input.float(2.0, "TP x ATR", group=gRisk, step=0.1)
+slMultQ = input.float(0.75,"Quick SL x ATR", group=gRisk, step=0.05)
+tpMultQ = input.float(1.5, "Quick TP x ATR", group=gRisk, step=0.1)
+
+dailyLossLimit = input.float(600.0, "Daily loss limit $", group=gGuard, step=50)
+cooldownBars   = input.int(3, "Re-entry cooldown (bars)", group=gGuard, minval=0)
+adxMin         = input.int(20, "ADX min (advisory)", group=gGuard)
+
+useRetest = input.bool(true, "ORB Retest",     group=gSet)
+useEma21  = input.bool(true, "EMA21 Pullback", group=gSet)
+useBreak  = input.bool(true, "ORB Break",      group=gSet)
+useQuick  = input.bool(false,"Quick Scalp (drags PF)", group=gSet)
+
+// ── Core indicators ──────────────────────────────────────────────────────────
+tz = "America/New_York"
+ema9  = ta.ema(close, 9)
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+vwapVal = ta.vwap(hlc3)
+atr = ta.atr(atrLen)
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+plot(ema21, "EMA 21", color=color.new(#FF9800, 0), linewidth=2)
+plot(ema50, "EMA 50", color=color.new(#AB47BC, 0), linewidth=1)
+plot(vwapVal, "VWAP",  color=color.new(#29B6F6, 0), linewidth=2)
+
+// ── Time / session / OR ──────────────────────────────────────────────────────
+etH = hour(time, tz)
+etM = minute(time, tz)
+isNewDay = na(time("D")[1]) or time("D") != time("D")[1]
+
+var float orH = na
+var float orL = na
+if isNewDay
+    orH := na
+    orL := na
+inOR = etH == 9 and etM >= 30
+if inOR
+    orH := na(orH) ? high : math.max(orH, high)
+    orL := na(orL) ? low  : math.min(orL, low)
+orReady = etH >= 10 and not na(orH) and not na(orL)
+
+inMorning   = (etH == 9 and etM >= 45) or (etH == 10) or (etH == 11 and etM < 30)
+inAfternoon = etH >= 13 and etH < 16
+inSession   = inMorning or inAfternoon
+
+// ── Direction + setups ───────────────────────────────────────────────────────
+bull = close > vwapVal
+bear = close < vwapVal
+
+orbRetestLong  = useRetest and bull and not na(orH) and low  <= orH and close > orH and close[1] > orH
+orbRetestShort = useRetest and bear and not na(orL) and high >= orL and close < orL and close[1] < orL
+ema21Long      = useEma21  and bull and ema21 >= ema21[1] and low  <= ema21 and close > ema21
+ema21Short     = useEma21  and bear and ema21 <= ema21[1] and high >= ema21 and close < ema21
+orbBreakLong   = useBreak  and bull and not na(orH) and close > orH and close[1] <= orH
+orbBreakShort  = useBreak  and bear and not na(orL) and close < orL and close[1] >= orL
+quickLong      = useQuick  and bull and ta.crossover(ema9, ema21)
+quickShort     = useQuick  and bear and ta.crossunder(ema9, ema21)
+
+longFire  = orbRetestLong or ema21Long or orbBreakLong or quickLong
+shortFire = orbRetestShort or ema21Short or orbBreakShort or quickShort
+longQuick  = not (orbRetestLong or ema21Long or orbBreakLong) and quickLong
+shortQuick = not (orbRetestShort or ema21Short or orbBreakShort) and quickShort
+
+// ── Guards: daily loss limit + re-entry cooldown ─────────────────────────────
+var float dayStartEquity = na
+if isNewDay
+    dayStartEquity := strategy.equity
+dailyPnl = strategy.equity - (na(dayStartEquity) ? strategy.equity : dayStartEquity)
+haltDay = dailyPnl <= -dailyLossLimit
+
+var int lastExitBar = -100000
+wasFlat = strategy.position_size == 0
+if wasFlat and strategy.position_size[1] != 0
+    lastExitBar := bar_index
+cooledDown = bar_index - lastExitBar >= cooldownBars
+
+canEnter = inSession and orReady and strategy.position_size == 0 and not haltDay and cooledDown
+
+// ── Orders ───────────────────────────────────────────────────────────────────
+longSL  = close - atr * (longQuick  ? slMultQ : slMult)
+longTP  = close + atr * (longQuick  ? tpMultQ : tpMult)
+shortSL = close + atr * (shortQuick ? slMultQ : slMult)
+shortTP = close - atr * (shortQuick ? tpMultQ : tpMult)
+
+if canEnter and longFire
+    strategy.entry("Long", strategy.long, qty=contracts)
+    strategy.exit("L-x", "Long", stop=longSL, limit=longTP)
+
+if canEnter and shortFire
+    strategy.entry("Short", strategy.short, qty=contracts)
+    strategy.exit("S-x", "Short", stop=shortSL, limit=shortTP)
+
+// Flat everything by 16:00 ET
+if etH >= 16 and strategy.position_size != 0
+    strategy.close_all("EOD")
+
+// ── Visuals ──────────────────────────────────────────────────────────────────
+plotshape(canEnter and longFire,  "Long",  shape.triangleup,   location.belowbar, color.new(#26A69A, 0), size=size.small)
+plotshape(canEnter and shortFire, "Short", shape.triangledown, location.abovebar, color.new(#EF5350, 0), size=size.small)
+bgcolor(haltDay ? color.new(#EF5350, 90) : na, title="Daily loss halt")
+
+var table tb = table.new(position.top_right, 2, 4, bgcolor=color.new(#0D0D0D, 15), border_color=color.new(#333333, 0), border_width=1, frame_color=color.new(#333333, 0), frame_width=1)
+if barstate.islast
+    table.cell(tb, 0, 0, "MNQ Strat", text_color=color.white, bgcolor=color.new(#1565C0, 15), text_size=size.small)
+    table.cell(tb, 1, 0, str.tostring(contracts) + "x", text_color=#FFC107, bgcolor=color.new(#1565C0, 15), text_size=size.small)
+    table.cell(tb, 0, 1, "Day P&L", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 1, "$" + str.tostring(math.round(dailyPnl)), text_color=dailyPnl >= 0 ? #26A69A : #EF5350, text_size=size.small)
+    table.cell(tb, 0, 2, "Halted", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 2, haltDay ? "YES" : "no", text_color=haltDay ? #EF5350 : #26A69A, text_size=size.small)
+    table.cell(tb, 0, 3, "Net Profit", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 3, "$" + str.tostring(math.round(strategy.netprofit)), text_color=strategy.netprofit >= 0 ? #26A69A : #EF5350, text_size=size.small)

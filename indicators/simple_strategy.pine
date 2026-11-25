@@ -1,0 +1,101 @@
+//@version=5
+// =============================================================
+//  NQ Simple Strategy — Signal Tool v1
+//  Manual decision-support for TopStep (you place the trades).
+//  Based on Heitkoetter's "Simple Strategy":
+//    Bollinger Bands 12/2 + MACD 12/26/9 + RSI 7, ADR-based exits.
+//  Works on NQ (E-mini, $20/pt) or MNQ ($2/pt) — switch the symbol.
+//  Strategy Tester tab gives the backtested win-rate.
+// =============================================================
+strategy("NQ Simple Strategy - Signal Tool v1", overlay=true,
+     default_qty_type=strategy.fixed, default_qty_value=1,
+     initial_capital=50000,
+     commission_type=strategy.commission.cash_per_contract, commission_value=2.0,
+     calc_on_every_tick=false)
+
+// ===== Inputs =====
+bbLen    = input.int(12,  "Bollinger Length",  group="Indicators")
+bbMult   = input.float(2.0,"Bollinger StdDev", group="Indicators")
+macdFast = input.int(12,  "MACD Fast",         group="Indicators")
+macdSlow = input.int(26,  "MACD Slow",         group="Indicators")
+macdSig  = input.int(9,   "MACD Signal",       group="Indicators")
+rsiLen   = input.int(7,   "RSI Length",        group="Indicators")
+rsiMid   = input.int(50,  "RSI Midline",       group="Indicators")
+adrLen   = input.int(20,  "ADR Lookback (days)", group="Risk")
+stopPct  = input.float(10,"Stop = % of ADR",   group="Risk") / 100
+tgtPct   = input.float(15,"Target = % of ADR", group="Risk") / 100
+useLong  = input.bool(true, "Allow Longs",     group="Direction")
+useShort = input.bool(true, "Allow Shorts",    group="Direction")
+
+// ===== Indicators =====
+basis   = ta.sma(close, bbLen)
+dev     = bbMult * ta.stdev(close, bbLen)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSig)
+rsi = ta.rsi(close, rsiLen)
+
+// Average Daily Range in points (computed on the daily timeframe, no repaint)
+adr = request.security(syminfo.tickerid, "D", ta.sma(high - low, adrLen),
+     lookahead=barmerge.lookahead_off)
+stopPts = adr * stopPct
+tgtPts  = adr * tgtPct
+
+// ===== Signal logic (all 3 must align) =====
+macdCrossUp = ta.crossover(macdLine, signalLine)
+macdCrossDn = ta.crossunder(macdLine, signalLine)
+
+longCond  = useLong  and macdCrossUp and rsi > rsiMid and close < upperBB
+shortCond = useShort and macdCrossDn and rsi < rsiMid and close > lowerBB
+
+sig  = longCond ? "BUY" : shortCond ? "SELL" : "WAIT"
+bias = (close > basis and macdLine > signalLine) ? "BULLISH" :
+       (close < basis and macdLine < signalLine) ? "BEARISH" : "NEUTRAL"
+
+// ===== Orders (for the backtest / win-rate) =====
+if longCond
+    strategy.entry("Long", strategy.long)
+if shortCond
+    strategy.entry("Short", strategy.short)
+
+if strategy.position_size > 0
+    strategy.exit("XL", from_entry="Long",
+         stop  = strategy.position_avg_price - stopPts,
+         limit = strategy.position_avg_price + tgtPts)
+if strategy.position_size < 0
+    strategy.exit("XS", from_entry="Short",
+         stop  = strategy.position_avg_price + stopPts,
+         limit = strategy.position_avg_price - tgtPts)
+
+// ===== On-chart visuals =====
+plot(basis,   "BB Basis", color=color.new(color.gray, 0))
+pu = plot(upperBB, "BB Upper", color=color.new(color.blue, 50))
+pl = plot(lowerBB, "BB Lower", color=color.new(color.blue, 50))
+fill(pu, pl, color=color.new(color.blue, 95))
+
+plotshape(longCond,  "Buy",  shape.triangleup,   location.belowbar, color.new(color.green,0), size=size.small, text="BUY")
+plotshape(shortCond, "Sell", shape.triangledown, location.abovebar, color.new(color.red,0),   size=size.small, text="SELL")
+
+// ===== UI panel (top-right) =====
+var table t = table.new(position.top_right, 2, 7, border_width=1, frame_color=color.gray, frame_width=1)
+if barstate.islast
+    sigColor = sig == "BUY" ? color.green : sig == "SELL" ? color.red : color.gray
+    table.cell(t, 0, 0, "Signal Tool", bgcolor=color.black, text_color=color.white)
+    table.cell(t, 1, 0, "v1",          bgcolor=color.black, text_color=color.white)
+    table.cell(t, 0, 1, "Signal", text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 1, sig,      text_color=color.white, bgcolor=sigColor)
+    table.cell(t, 0, 2, "Bias",   text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 2, bias,     text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 0, 3, "RSI(7)", text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 3, str.tostring(rsi, "#.0"), text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 0, 4, "MACD",   text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 4, macdLine > signalLine ? "Up" : "Down", text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 0, 5, "ADR pts",text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 5, str.tostring(adr, "#.0"), text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 0, 6, "Stop/Tgt",text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(t, 1, 6, str.tostring(stopPts, "#.0") + " / " + str.tostring(tgtPts, "#.0"), text_color=color.white, bgcolor=color.new(color.gray,40))
+
+// ===== Alerts (optional — right-click chart > Add alert) =====
+alertcondition(longCond,  "BUY signal",  "Simple Strategy BUY")
+alertcondition(shortCond, "SELL signal", "Simple Strategy SELL")

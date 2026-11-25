@@ -1,0 +1,11 @@
+variant,n,mean_wins,mean_pct,med_wins,d_mean,d_med,d_bust
++S lw_gsv_short,27,5,19,4,-157,0,0.0
++S rh_irb_gated_short,27,2,7,4,-542,0,0.0
++S macd_x_short,27,3,11,2,-248,0,1.7
++S donch20_short,27,0,0,0,-885,0,1.4
++S tm_open_newlow,27,0,0,3,-586,0,0.0
++S wy_sow_short,27,0,0,1,-621,0,0.3
++L ic_fvg_long,27,3,11,2,-599,0,1.1
++L vwap_reclaim_long,27,0,0,0,-1045,0,4.1
++L bs_avwap_2day_long,27,0,0,2,-736,0,2.7
++S lw_gsv +L ic_fvg,27,1,4,1,-789,0,3.8

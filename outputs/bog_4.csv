@@ -1,0 +1,3 @@
+label,grid_net_pos,sel_goal_configs,holdout_survivors,best_hold_net,best_sel_net,min_sel_cal
+rand6,472,2,42,8848,10005,30
+rand7,256,0,112,10987,5856,40

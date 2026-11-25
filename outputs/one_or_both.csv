@@ -1,0 +1,25 @@
+long,short,mode,period,n,mean_out,med_out,p75_out,pay_pct,bust_pct,zombie_pct,dead_pct
+tt_turtle_s2_long,vol_lw_stretch_short,long only,sel,47,0,0,0,0.0,0.0,100.0,100.0
+tt_turtle_s2_long,vol_lw_stretch_short,long only,hold,117,124,0,0,23.9,8.5,67.5,76.1
+tt_turtle_s2_long,vol_lw_stretch_short,short only,sel,47,0,0,0,0.0,0.0,100.0,100.0
+tt_turtle_s2_long,vol_lw_stretch_short,short only,hold,117,310,0,354,47.9,4.3,47.9,52.1
+tt_turtle_s2_long,vol_lw_stretch_short,BOTH,sel,47,19,0,0,6.4,0.0,93.6,93.6
+tt_turtle_s2_long,vol_lw_stretch_short,BOTH,hold,117,872,410,1482,63.2,7.7,31.6,39.3
+sr_round100_break,vol_lw_stretch_short,long only,sel,47,612,0,1390,38.3,0.0,61.7,61.7
+sr_round100_break,vol_lw_stretch_short,long only,hold,117,816,0,1324,35.9,2.6,61.5,64.1
+sr_round100_break,vol_lw_stretch_short,short only,sel,47,0,0,0,0.0,0.0,100.0,100.0
+sr_round100_break,vol_lw_stretch_short,short only,hold,117,312,0,351,47.0,3.4,50.4,53.8
+sr_round100_break,vol_lw_stretch_short,BOTH,sel,47,961,0,1702,46.8,0.0,53.2,53.2
+sr_round100_break,vol_lw_stretch_short,BOTH,hold,117,1355,0,1564,43.6,6.0,52.1,58.1
+mf_wkpiv_long,vol_lw_stretch_short,long only,sel,47,20,0,0,4.3,0.0,95.7,95.7
+mf_wkpiv_long,vol_lw_stretch_short,long only,hold,117,358,0,310,30.8,7.7,63.2,70.9
+mf_wkpiv_long,vol_lw_stretch_short,short only,sel,47,53,0,0,19.1,0.0,80.9,80.9
+mf_wkpiv_long,vol_lw_stretch_short,short only,hold,117,573,273,510,53.8,4.3,41.9,46.2
+mf_wkpiv_long,vol_lw_stretch_short,BOTH,sel,47,210,0,414,36.2,0.0,63.8,63.8
+mf_wkpiv_long,vol_lw_stretch_short,BOTH,hold,117,835,0,1610,47.9,6.8,46.2,53.0
+mf_wkpiv_long,bb_break_short,long only,sel,47,372,0,431,40.4,0.0,59.6,59.6
+mf_wkpiv_long,bb_break_short,long only,hold,117,506,0,403,41.0,3.4,55.6,59.0
+mf_wkpiv_long,bb_break_short,short only,sel,47,519,0,1348,40.4,2.1,57.4,59.6
+mf_wkpiv_long,bb_break_short,short only,hold,117,309,0,265,27.4,6.0,68.4,74.4
+mf_wkpiv_long,bb_break_short,BOTH,sel,47,756,0,1619,48.9,2.1,48.9,51.1
+mf_wkpiv_long,bb_break_short,BOTH,hold,117,805,0,496,35.0,3.4,62.4,65.8

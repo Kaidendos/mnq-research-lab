@@ -1,0 +1,176 @@
+//@version=5
+// =============================================================================
+// APEX  |  MNQ / QQQ  --  Trend Pullback Strategy
+// =============================================================================
+// Engine  : EMA21 pullback + trend-break continuation, ATR risk, R:R targets
+// Broker  : MNQ (Micro E-mini Nasdaq-100)  |  Chart works on MNQ or QQQ
+// Combine : Topstep $50K  --  $3k profit / $2k trailing DD / $1k daily loss
+//
+// This version ACTUALLY TRADES (populates the Strategy Tester report) and
+// draws clean, labeled entries with stop/target in points and dollars,
+// green TP / red SL pill markers, and purple supply/demand zones.
+// =============================================================================
+
+strategy("APEX  |  MNQ / QQQ", shorttitle="APEX", overlay=true, initial_capital=50000, pyramiding=0, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=1.0, calc_on_every_tick=false, max_boxes_count=120, max_lines_count=500, max_labels_count=500)
+
+// =============================================================================
+// INPUTS
+// =============================================================================
+gEMA   = "Trend"
+gRisk  = "Risk"
+gSetup = "Setups"
+gStyle = "Style"
+
+i_fast       = input.int(21,  "EMA Fast",                    group=gEMA)
+i_mid        = input.int(50,  "EMA Mid",                     group=gEMA)
+i_slow       = input.int(200, "EMA Slow",                    group=gEMA)
+i_use200     = input.bool(false, "Require EMA200 trend filter", group=gEMA)
+i_adx_len    = input.int(14,  "ADX / DMI Length",            group=gEMA)
+i_adx_smooth = input.int(14,  "ADX Smoothing",               group=gEMA)
+
+i_atr_len    = input.int(14,  "ATR Length",                  group=gRisk)
+i_stop_mult  = input.float(1.5, "Stop = ATR x",              group=gRisk, step=0.1, minval=0.5)
+i_rr         = input.float(2.0, "Reward : Risk",             group=gRisk, step=0.5, minval=1.0)
+i_contracts  = input.int(3,   "Contracts",                   group=gRisk, minval=1)
+
+i_brk_len    = input.int(20,  "Trend-Break Lookback",        group=gSetup)
+i_use_session= input.bool(false, "Only trade RTH (09:30-16:00 ET)", group=gSetup)
+
+i_symbol     = input.string("MNQ", "Label Symbol",          group=gStyle)
+i_ext        = input.int(16,  "Level Extend (bars)",         group=gStyle, minval=4)
+i_show_zones = input.bool(true, "Show Supply / Demand Zones", group=gStyle)
+i_show_labels= input.bool(true, "Show Trade Labels",          group=gStyle)
+i_show_table = input.bool(true, "Show Info Table",            group=gStyle)
+
+// =============================================================================
+// CORE INDICATORS
+// =============================================================================
+ema21 = ta.ema(close, i_fast)
+ema50 = ta.ema(close, i_mid)
+ema200 = ta.ema(close, i_slow)
+atr   = ta.atr(i_atr_len)
+[diPlus, diMinus, adxRaw] = ta.dmi(i_adx_len, i_adx_smooth)
+adx = na(adxRaw) ? 0.0 : adxRaw
+
+// Session (optional gate)
+SESSION = "0930-1600"
+in_sess = not na(time(timeframe.period, SESSION, "America/New_York"))
+sess_ok = not i_use_session or in_sess
+
+// Trend regime
+bull = ema21 > ema50 and (not i_use200 or close > ema200)
+bear = ema21 < ema50 and (not i_use200 or close < ema200)
+
+// =============================================================================
+// SETUPS
+//   EMA21 Pullback : price crosses back through the fast EMA in trend direction
+//   Trend Break    : price breaks the N-bar high/low in trend direction
+// =============================================================================
+pull_long  = ta.crossover(close, ema21)
+pull_short = ta.crossunder(close, ema21)
+brk_long   = ta.crossover(close, ta.highest(high, i_brk_len)[1])
+brk_short  = ta.crossunder(close, ta.lowest(low,  i_brk_len)[1])
+
+long_raw  = bull and (pull_long  or brk_long)  and close > open and sess_ok
+short_raw = bear and (pull_short or brk_short) and close < open and sess_ok
+
+long_name  = brk_long  ? "Trend Break" : "EMA21 Pullback"
+short_name = brk_short ? "Trend Break" : "EMA21 Pullback"
+
+// =============================================================================
+// RISK LEVELS
+// =============================================================================
+risk_pts   = atr * i_stop_mult
+long_stop  = close - risk_pts
+long_tp    = close + risk_pts * i_rr
+short_stop = close + risk_pts
+short_tp   = close - risk_pts * i_rr
+
+// =============================================================================
+// STRATEGY ORDERS  (this is what populates the Strategy Tester report)
+// =============================================================================
+if long_raw
+    strategy.entry("Long", strategy.long, qty=i_contracts)
+    strategy.exit("L-Exit", "Long", stop=long_stop, limit=long_tp)
+
+if short_raw
+    strategy.entry("Short", strategy.short, qty=i_contracts)
+    strategy.exit("S-Exit", "Short", stop=short_stop, limit=short_tp)
+
+// =============================================================================
+// EMA PLOTS  (dark-theme palette: white / orange / purple)
+// =============================================================================
+plot(ema21,  "EMA 21",  color=color.new(color.white, 0), linewidth=2)
+plot(ema50,  "EMA 50",  color=color.new(#FF9800, 0),     linewidth=2)
+plot(ema200, "EMA 200", color=color.new(#AB47BC, 0),     linewidth=2)
+
+// Session tint
+bgcolor(i_use_session and in_sess ? color.new(#26A69A, 93) : na, title="Session")
+
+// =============================================================================
+// SUPPLY / DEMAND ZONES  (purple order-block bands)
+// =============================================================================
+impulse_up = close > open and (close - open) > atr
+impulse_dn = open > close and (open - close) > atr
+
+if i_show_zones and impulse_up and close[1] < open[1]
+    box.new(bar_index[1], high[1], bar_index[1] + i_ext, low[1], border_color=color.new(#7B1FA2, 45), bgcolor=color.new(#7B1FA2, 88), border_width=1)
+
+if i_show_zones and impulse_dn and close[1] > open[1]
+    box.new(bar_index[1], high[1], bar_index[1] + i_ext, low[1], border_color=color.new(#7B1FA2, 45), bgcolor=color.new(#7B1FA2, 88), border_width=1)
+
+// =============================================================================
+// TRADE LABELS + LEVEL LINES
+// =============================================================================
+conf = adx >= 25 ? "High confidence" : adx >= 18 ? "Medium confidence" : "Lower confidence"
+
+if i_show_labels and long_raw
+    slp = close - long_stop
+    tpp = long_tp - close
+    slu = slp * syminfo.pointvalue * i_contracts
+    tpu = tpp * syminfo.pointvalue * i_contracts
+    txt = "LONG " + i_symbol + " (" + long_name + ")\n" + conf + "   |   ADX: " + str.tostring(math.round(adx)) + "\nStop: " + str.tostring(math.round(slp)) + " pts  (-$" + str.tostring(math.round(slu)) + ")\nTarget: " + str.tostring(math.round(tpp)) + " pts  (+$" + str.tostring(math.round(tpu)) + ")"
+    label.new(bar_index, low, txt, yloc=yloc.price, style=label.style_label_up, color=color.new(#1B5E20, 8), textcolor=color.white, size=size.normal)
+    line.new(bar_index, close,     bar_index + i_ext, close,     color=color.new(color.gray, 25), style=line.style_dashed, width=1)
+    line.new(bar_index, long_tp,   bar_index + i_ext, long_tp,   color=color.new(#26A69A, 0),     style=line.style_dashed, width=1)
+    line.new(bar_index, long_stop, bar_index + i_ext, long_stop, color=color.new(#EF5350, 0),     style=line.style_dashed, width=1)
+    label.new(bar_index + i_ext, long_tp,   "TP +$" + str.tostring(math.round(tpu)), style=label.style_label_left, color=color.new(#26A69A, 0), textcolor=color.white, size=size.small)
+    label.new(bar_index + i_ext, long_stop, "SL -$" + str.tostring(math.round(slu)), style=label.style_label_left, color=color.new(#EF5350, 0), textcolor=color.white, size=size.small)
+
+if i_show_labels and short_raw
+    slp = short_stop - close
+    tpp = close - short_tp
+    slu = slp * syminfo.pointvalue * i_contracts
+    tpu = tpp * syminfo.pointvalue * i_contracts
+    txt = "SHORT " + i_symbol + " (" + short_name + ")\n" + conf + "   |   ADX: " + str.tostring(math.round(adx)) + "\nStop: " + str.tostring(math.round(slp)) + " pts  (-$" + str.tostring(math.round(slu)) + ")\nTarget: " + str.tostring(math.round(tpp)) + " pts  (+$" + str.tostring(math.round(tpu)) + ")"
+    label.new(bar_index, high, txt, yloc=yloc.price, style=label.style_label_down, color=color.new(#B71C1C, 8), textcolor=color.white, size=size.normal)
+    line.new(bar_index, close,      bar_index + i_ext, close,      color=color.new(color.gray, 25), style=line.style_dashed, width=1)
+    line.new(bar_index, short_tp,   bar_index + i_ext, short_tp,   color=color.new(#26A69A, 0),     style=line.style_dashed, width=1)
+    line.new(bar_index, short_stop, bar_index + i_ext, short_stop, color=color.new(#EF5350, 0),     style=line.style_dashed, width=1)
+    label.new(bar_index + i_ext, short_tp,   "TP +$" + str.tostring(math.round(tpu)), style=label.style_label_left, color=color.new(#26A69A, 0), textcolor=color.white, size=size.small)
+    label.new(bar_index + i_ext, short_stop, "SL -$" + str.tostring(math.round(slu)), style=label.style_label_left, color=color.new(#EF5350, 0), textcolor=color.white, size=size.small)
+
+// Entry markers on the candles
+plotshape(long_raw,  "Long Entry",  shape.triangleup,   location.belowbar, color.new(#26A69A, 0), size=size.small)
+plotshape(short_raw, "Short Entry", shape.triangledown, location.abovebar, color.new(#EF5350, 0), size=size.small)
+
+// =============================================================================
+// INFO TABLE  (top-right, dark)
+// =============================================================================
+var table tb = table.new(position.top_right, 2, 5, bgcolor=color.new(#0D0D0D, 15), border_color=color.new(#333333, 0), border_width=1, frame_color=color.new(#333333, 0), frame_width=1)
+
+if i_show_table and barstate.islast
+    trendTxt = bull ? "BULLISH" : bear ? "BEARISH" : "RANGE"
+    trendCol = bull ? #26A69A : bear ? #EF5350 : color.new(#9E9E9E, 0)
+    posTxt   = strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : "FLAT"
+    posCol   = strategy.position_size > 0 ? #26A69A : strategy.position_size < 0 ? #EF5350 : color.new(#9E9E9E, 0)
+    table.cell(tb, 0, 0, "APEX",     text_color=color.white, bgcolor=color.new(#1565C0, 15), text_size=size.normal)
+    table.cell(tb, 1, 0, i_symbol,   text_color=#FFC107,     bgcolor=color.new(#1565C0, 15), text_size=size.normal)
+    table.cell(tb, 0, 1, "Trend",    text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 1, trendTxt,   text_color=trendCol, text_size=size.small)
+    table.cell(tb, 0, 2, "ADX",      text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 2, str.tostring(math.round(adx)), text_color=color.white, text_size=size.small)
+    table.cell(tb, 0, 3, "Position", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 3, posTxt,     text_color=posCol, text_size=size.small)
+    table.cell(tb, 0, 4, "Open P&L", text_color=color.new(#9E9E9E, 0), text_size=size.small)
+    table.cell(tb, 1, 4, "$" + str.tostring(math.round(strategy.openprofit)), text_color=strategy.openprofit >= 0 ? #26A69A : #EF5350, text_size=size.small)
