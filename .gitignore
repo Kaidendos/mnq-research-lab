@@ -1,3 +1,14 @@
+@'
+.env
+.env.*
+!.env.example
+node_modules/
+venv/
+__pycache__/
+bin/
+obj/
+*.log
+*.parquet
 *.csv.gz
 *.jsonl
 *.heartbeat
@@ -5,3 +16,5 @@
 *.disarm
 *.DISABLED-do-not-autostart
 secrets.local.js
+'@ | Set-Content 'C:\Users\kaide\OneDrive\Desktop\github-export\mnq-research-lab\.gitignore'
+Get-Content 'C:\Users\kaide\OneDrive\Desktop\github-export\mnq-research-lab\.gitignore'
