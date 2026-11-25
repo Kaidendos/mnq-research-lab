@@ -1,0 +1,17 @@
+long,short,sl,tp,cap,budget,hold_paid,hold_bust,hold_mean,hold_med,hold_days,recent_paid,recent_bust,recent_mean,recent_med,recent_days
+sr_round100_break,rh_irb_gated_short,2.0,3.0,440,300,31.6,7.9,633,0,30,34.8,0.0,315,0,28
+sr_round100_break,rh_irb_gated_short,2.0,3.0,440,400,32.0,11.3,627,0,30,34.8,0.0,301,0,25
+ic_fvg_long,rh_irb_gated_short,2.0,3.0,440,300,45.0,1.0,632,0,50,30.4,0.0,107,0,35
+ic_fvg_long,rh_irb_gated_short,2.0,3.0,440,400,49.1,1.4,686,0,52,30.4,0.0,107,0,35
+vwap_reclaim_long,rh_irb_gated_short,2.0,3.0,440,300,28.2,7.2,271,0,22,30.4,17.4,243,0,16
+vwap_reclaim_long,rh_irb_gated_short,2.0,3.0,440,400,29.2,3.1,362,0,22,30.4,13.0,279,0,16
+lw_gsv_long,rh_irb_gated_short,2.0,3.0,440,300,23.7,0.7,228,0,49,0.0,0.0,0,0,-1
+lw_gsv_long,rh_irb_gated_short,2.0,3.0,440,400,22.0,0.7,177,0,48,0.0,0.0,0,0,-1
+qm_ep_long,rh_irb_gated_short,2.0,3.0,440,300,47.1,0.7,627,0,74,0.0,0.0,0,0,-1
+qm_ep_long,rh_irb_gated_short,2.0,3.0,440,400,54.0,0.3,719,269,87,0.0,0.0,0,0,-1
+wy_lps_long,rh_irb_gated_short,2.0,3.0,440,300,58.8,4.8,1200,343,70,0.0,0.0,0,0,-1
+wy_lps_long,rh_irb_gated_short,2.0,3.0,440,400,56.4,4.8,1205,339,67,0.0,0.0,0,0,-1
+bs_avwap_2day_long,rh_irb_gated_short,2.0,3.0,440,300,28.5,5.8,482,0,35,39.1,4.3,178,0,52
+bs_avwap_2day_long,rh_irb_gated_short,2.0,3.0,440,400,32.0,2.7,521,0,35,39.1,0.0,198,0,48
+ww_psar_dmi_long,rh_irb_gated_short,2.0,3.0,440,300,51.5,2.7,1121,280,50,47.8,0.0,293,0,41
+ww_psar_dmi_long,rh_irb_gated_short,2.0,3.0,440,400,53.3,2.4,1136,292,54,47.8,0.0,337,0,39

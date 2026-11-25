@@ -1,0 +1,17 @@
+long,short,sl,tp,cap,budget,hold_paid,hold_bust,hold_mean,hold_med,hold_days,recent_paid,recent_bust,recent_mean,recent_med,recent_days
+sr_round100_break,lw_gsv_short,2.0,3.0,440,300,40.2,4.8,1275,0,28,39.1,0.0,267,0,29
+sr_round100_break,lw_gsv_short,2.0,3.0,440,400,40.9,5.8,1390,0,28,30.4,0.0,183,0,27
+ic_fvg_long,lw_gsv_short,2.0,3.0,440,300,43.6,2.4,1052,0,43,26.1,4.3,87,0,29
+ic_fvg_long,lw_gsv_short,2.0,3.0,440,400,40.5,3.8,880,0,38,26.1,0.0,87,0,29
+vwap_reclaim_long,lw_gsv_short,2.0,3.0,440,300,26.8,6.2,364,0,25,21.7,8.7,253,0,17
+vwap_reclaim_long,lw_gsv_short,2.0,3.0,440,400,27.8,8.6,408,0,26,30.4,0.0,295,0,17
+lw_gsv_long,lw_gsv_short,2.0,3.0,440,300,28.2,6.5,381,0,80,0.0,0.0,0,0,-1
+lw_gsv_long,lw_gsv_short,2.0,3.0,440,400,28.2,6.5,400,0,80,0.0,0.0,0,0,-1
+qm_ep_long,lw_gsv_short,2.0,3.0,440,300,46.7,8.2,1234,296,64,0.0,0.0,0,0,-1
+qm_ep_long,lw_gsv_short,2.0,3.0,440,400,48.5,8.6,1301,363,64,0.0,0.0,0,0,-1
+wy_lps_long,lw_gsv_short,2.0,3.0,440,300,62.2,0.0,1424,412,61,0.0,8.7,0,0,-1
+wy_lps_long,lw_gsv_short,2.0,3.0,440,400,63.2,0.0,1503,412,59,0.0,0.0,0,0,-1
+bs_avwap_2day_long,lw_gsv_short,2.0,3.0,440,300,37.5,2.4,695,0,51,34.8,0.0,131,0,53
+bs_avwap_2day_long,lw_gsv_short,2.0,3.0,440,400,42.6,2.4,871,0,51,8.7,0.0,26,0,33
+ww_psar_dmi_long,lw_gsv_short,2.0,3.0,440,300,46.7,0.3,1010,0,42,47.8,0.0,162,0,41
+ww_psar_dmi_long,lw_gsv_short,2.0,3.0,440,400,44.3,0.3,1113,0,39,43.5,0.0,167,0,41

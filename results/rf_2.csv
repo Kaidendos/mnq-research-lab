@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+lo_failed_breakdown_long,1,308,40.3,-6.82,2.87,-9.69,-2983,10
+lo_stretch_reclaim_long,1,162,38.9,-5.96,1.91,-7.87,-1275,8
+lo_capitulation_long,1,92,47.8,11.32,7.62,3.7,340,2
+lo_vwap_reclaim_long,1,85,40.0,-12.77,-4.52,-8.25,-701,9

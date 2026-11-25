@@ -1,0 +1,5 @@
+family,side,trades,win,ppt,ctl,edge,total_edge,beaten
+ex_blowoff_loose_short,-1,504,39.1,-2.57,1.54,-4.11,-2073,9
+ex_rsi14_short,-1,196,39.8,-5.53,-0.16,-5.37,-1053,8
+ex_stretch2.0_short,-1,491,38.3,-3.06,0.89,-3.95,-1937,7
+ex_blowout5d_short,-1,394,38.6,-4.34,-0.31,-4.03,-1588,9
